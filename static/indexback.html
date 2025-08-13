@@ -1,0 +1,2203 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HAR文件分析工具</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background-color: #f5f5f5;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px;
+            border-radius: 10px;
+            text-align: center;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            font-weight: 300;
+        }
+
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .upload-area {
+            background: white;
+            border: 3px dashed #ddd;
+            border-radius: 10px;
+            padding: 60px 40px;
+            text-align: center;
+            margin-bottom: 30px;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            position: relative;
+        }
+
+        .upload-area:hover,
+        .upload-area.dragover {
+            border-color: #667eea;
+            background-color: #f8f9ff;
+        }
+
+        .upload-icon {
+            font-size: 4em;
+            margin-bottom: 20px;
+            opacity: 0.7;
+        }
+
+        .upload-text {
+            font-size: 1.3em;
+            margin-bottom: 10px;
+            color: #555;
+        }
+
+        .upload-hint {
+            color: #888;
+            margin-bottom: 20px;
+        }
+
+        .upload-area input[type="file"] {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            cursor: pointer;
+        }
+
+        .btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+
+        .btn:hover {
+            background: #5a6fd8;
+        }
+
+        .btn-sm {
+            padding: 8px 16px;
+            font-size: 14px;
+        }
+
+        .results {
+            display: none;
+        }
+
+        .summary-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .summary-card {
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            border-left: 4px solid #667eea;
+        }
+
+        .summary-card.success {
+            border-left-color: #28a745;
+        }
+
+        .summary-card.error {
+            border-left-color: #dc3545;
+        }
+
+        .summary-card h3 {
+            font-size: 0.9em;
+            color: #666;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .summary-card .value {
+            font-size: 2em;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .tabs {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+
+        .tab-buttons {
+            display: flex;
+            background: #f8f9fa;
+            border-bottom: 1px solid #dee2e6;
+            overflow-x: auto;
+        }
+
+        .tab-btn {
+            background: none;
+            border: none;
+            padding: 15px 20px;
+            cursor: pointer;
+            font-size: 14px;
+            color: #6c757d;
+            white-space: nowrap;
+            transition: all 0.3s;
+            border-bottom: 3px solid transparent;
+        }
+
+        .tab-btn:hover {
+            background: #e9ecef;
+            color: #495057;
+        }
+
+        .tab-btn.active {
+            background: white;
+            color: #667eea;
+            border-bottom-color: #667eea;
+        }
+
+        .tab-content {
+            padding: 25px;
+        }
+
+        .tab-panel {
+            display: none;
+        }
+
+        .tab-panel.active {
+            display: block;
+        }
+
+        .requests-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .requests-table th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #495057;
+            text-transform: uppercase;
+            font-size: 12px;
+            letter-spacing: 0.5px;
+        }
+
+        .requests-table th,
+        .requests-table td {
+            padding: 8px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+
+        /* 时间列的特殊样式 */
+        .requests-table th:nth-child(2),
+        .requests-table td:nth-child(2) {
+            min-width: 180px;
+            white-space: nowrap;
+        }
+
+        /* 序号列样式 */
+        .requests-table th:nth-child(1),
+        .requests-table td:nth-child(1) {
+            width: 60px;
+            text-align: center;
+        }
+
+        .requests-table tbody tr:hover {
+            background-color: #f8f9fa;
+        }
+
+        .error-row {
+            background-color: #fff5f5;
+        }
+
+        .error-row:hover {
+            background-color: #fed7d7;
+        }
+
+        .method-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .method-get {
+            background: #e3f2fd;
+            color: #1976d2;
+        }
+
+        .method-post {
+            background: #e8f5e8;
+            color: #388e3c;
+        }
+
+        .method-put {
+            background: #fff3e0;
+            color: #f57c00;
+        }
+
+        .method-delete {
+            background: #ffebee;
+            color: #d32f2f;
+        }
+
+        .method-patch {
+            background: #f3e5f5;
+            color: #7b1fa2;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: bold;
+        }
+
+        .status-success {
+            background: #e8f5e8;
+            color: #2e7d32;
+        }
+
+        .status-redirect {
+            background: #fff8e1;
+            color: #f57c00;
+        }
+
+        .status-error {
+            background: #ffebee;
+            color: #c62828;
+        }
+
+        .url-cell {
+            max-width: 300px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+        }
+
+        .modal-content {
+            background-color: white;
+            margin: 2% auto;
+            padding: 0;
+            border-radius: 10px;
+            width: 90%;
+            max-width: 1000px;
+            max-height: 90%;
+            overflow: hidden;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        .modal-header {
+            background: #667eea;
+            color: white;
+            padding: 20px 25px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-header h2 {
+            margin: 0;
+            font-size: 1.5em;
+        }
+
+        .close {
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+            line-height: 1;
+        }
+
+        .close:hover {
+            opacity: 0.7;
+        }
+
+        .request-details {
+            padding: 25px;
+            max-height: 70vh;
+            overflow-y: auto;
+        }
+
+        .detail-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border: 1px solid #e9ecef;
+        }
+
+        .detail-section h4 {
+            margin-bottom: 15px;
+            color: #495057;
+            font-size: 1.1em;
+        }
+
+        .detail-grid {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 10px 20px;
+            align-items: start;
+        }
+
+        .detail-label {
+            font-weight: 600;
+            color: #6c757d;
+            white-space: nowrap;
+        }
+
+        .alert {
+            padding: 15px;
+            margin-bottom: 20px;
+            border: 1px solid transparent;
+            border-radius: 6px;
+        }
+
+        .alert-success {
+            background-color: #d4edda;
+            border-color: #c3e6cb;
+            color: #155724;
+        }
+
+        .alert-danger {
+            background-color: #f8d7da;
+            border-color: #f5c6cb;
+            color: #721c24;
+        }
+
+        .error-overview {
+            margin-top: 30px;
+        }
+
+        .error-group {
+            margin-bottom: 25px;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .error-group-header {
+            background: #f8f9fa;
+            padding: 15px 20px;
+            cursor: pointer;
+            border-bottom: 1px solid #dee2e6;
+        }
+
+        .error-group-header:hover {
+            background: #e9ecef;
+        }
+
+        .error-group-header h4 {
+            margin: 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .error-count {
+            background: #dc3545;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .toggle-icon {
+            font-size: 16px;
+            color: #6c757d;
+        }
+
+        .error-group-content {
+            padding: 20px;
+        }
+
+        .error-requests-list {
+            space-y: 15px;
+        }
+
+        .error-request-item {
+            border: 1px solid #e9ecef;
+            border-radius: 6px;
+            margin-bottom: 15px;
+        }
+
+        .error-request-header {
+            background: #f8f9fa;
+            padding: 12px 15px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .error-request-header:hover {
+            background: #e9ecef;
+        }
+
+        .error-request-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .error-domain {
+            background: #e9ecef;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 12px;
+            color: #495057;
+        }
+
+        .error-ip {
+            background: #f8f9fa;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 11px;
+            color: #6c757d;
+            font-family: monospace;
+        }
+
+        .detail-toggle {
+            color: #667eea;
+            font-size: 12px;
+            cursor: pointer;
+        }
+
+        .error-request-detail {
+            padding: 20px;
+            border-top: 1px solid #e9ecef;
+        }
+
+        .error-detail-content {
+            space-y: 20px;
+        }
+
+        .error-url {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            word-break: break-all;
+            font-family: monospace;
+            font-size: 12px;
+        }
+
+        .error-description {
+            margin: 15px 0;
+        }
+
+        .error-causes,
+        .error-solutions {
+            margin: 15px 0;
+        }
+
+        .error-causes ul,
+        .error-solutions ul {
+            margin-left: 20px;
+        }
+
+        .error-causes li,
+        .error-solutions li {
+            margin-bottom: 5px;
+        }
+
+        .solutions-list {
+            padding-left: 20px;
+        }
+
+        .solutions-list li {
+            margin-bottom: 8px;
+            line-height: 1.5;
+        }
+
+        .whitelist-info {
+            background: #f0f8ff;
+            padding: 15px;
+            border-radius: 6px;
+            border: 1px solid #b8daff;
+            margin-top: 15px;
+        }
+
+        .whitelist-config {
+            margin-top: 10px;
+        }
+
+        .config-item {
+            margin-bottom: 8px;
+            font-family: monospace;
+            font-size: 12px;
+        }
+
+        .config-suggestions {
+            margin-top: 10px;
+        }
+
+        .config-suggestions ul {
+            margin-left: 20px;
+        }
+
+        .domain-stats {
+            display: grid;
+            gap: 20px;
+        }
+
+        .domain-item {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            border: 1px solid #e9ecef;
+        }
+
+        .domain-name {
+            font-size: 1.2em;
+            font-weight: bold;
+            margin-bottom: 15px;
+            color: #495057;
+        }
+
+        .domain-stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 15px;
+        }
+
+        .stat-item {
+            text-align: center;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: #6c757d;
+            margin-bottom: 5px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .stat-value {
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #495057;
+        }
+
+        .timeline {
+            space-y: 10px;
+        }
+
+        .timeline-item {
+            display: grid;
+            grid-template-columns: 180px 80px 1fr 100px;
+            gap: 15px;
+            padding: 12px;
+            background: white;
+            border: 1px solid #e9ecef;
+            border-radius: 6px;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .timeline-time {
+            font-family: monospace;
+            font-size: 11px;
+            color: #6c757d;
+            font-weight: 600;
+        }
+
+        .timeline-url {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-size: 13px;
+        }
+
+        .timeline-duration {
+            text-align: right;
+            font-weight: 600;
+            color: #495057;
+        }
+
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 10000;
+        }
+
+        .loading-content {
+            background: white;
+            padding: 40px;
+            border-radius: 10px;
+            text-align: center;
+            max-width: 400px;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .reset-button {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #6c757d;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            display: none;
+            z-index: 1000;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+            transition: background-color 0.3s;
+        }
+
+        .reset-button:hover {
+            background: #5a6268;
+        }
+
+        .error-summary-card {
+            background: #fff8f0;
+            border: 1px solid #ffd59e;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 25px;
+        }
+
+        .summary-section {
+            margin-bottom: 20px;
+        }
+
+        .summary-section h4 {
+            color: #495057;
+            margin-bottom: 10px;
+        }
+
+        .summary-solutions {
+            margin-left: 20px;
+        }
+
+        .summary-solutions li {
+            margin-bottom: 8px;
+            line-height: 1.5;
+        }
+
+        .response-preview {
+            margin: 15px 0;
+        }
+
+        .response-info {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 10px;
+            font-size: 12px;
+            color: #6c757d;
+        }
+
+        /* JSON语法高亮样式 */
+        .json-key {
+            color: #0451a5;
+            font-weight: bold;
+        }
+
+        .json-string {
+            color: #0a8518;
+        }
+
+        .json-number {
+            color: #098658;
+        }
+
+        .json-boolean {
+            color: #0000ff;
+            font-weight: bold;
+        }
+
+        .json-null {
+            color: #800080;
+            font-weight: bold;
+        }
+
+        .json-punctuation {
+            color: #000000;
+        }
+
+        .json-bracket {
+            color: #000000;
+            font-weight: bold;
+        }
+
+        /* HTTP头部语法高亮 */
+        .header-name {
+            color: #0451a5;
+            font-weight: bold;
+        }
+
+        .header-separator {
+            color: #000000;
+        }
+
+        .header-value {
+            color: #0a8518;
+        }
+
+        /* JSON语法高亮样式 */
+        .json-highlight {
+            background: #f8f8f8;
+            border: 1px solid #e1e4e8;
+            border-radius: 6px;
+            padding: 15px;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.6;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            word-break: break-word;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        /* HTTP头部专用样式 */
+        .http-headers {
+            background: #f6f8fa;
+            border: 1px solid #d1d5da;
+            border-radius: 6px;
+            padding: 12px;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 12px;
+            line-height: 1.6;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            word-break: break-word;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        /* 响应内容样式 */
+        .response-json {
+            background: #f6f8fa;
+            border: 1px solid #d1d5da;
+            border-radius: 6px;
+            padding: 12px;
+            max-height: 400px;
+            overflow-y: auto;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 12px;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .response-text {
+            background: #fff5f5;
+            border: 1px solid #fed7d7;
+            border-radius: 6px;
+            padding: 12px;
+            max-height: 400px;
+            overflow-y: auto;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 12px;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .response-html {
+            background: #f0f8ff;
+            border: 1px solid #bee5eb;
+            border-radius: 6px;
+            padding: 12px;
+            max-height: 400px;
+            overflow-y: auto;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 12px;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        /* 数据类型标签 */
+        .data-type-tag {
+            display: inline-block;
+            background: #e1f5fe;
+            color: #01579b;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 500;
+            margin-bottom: 8px;
+        }
+
+        .data-type-tag.json {
+            background: #e8f5e8;
+            color: #2e7d32;
+        }
+
+        .data-type-tag.html {
+            background: #fff3e0;
+            color: #e65100;
+        }
+
+        .data-type-tag.text {
+            background: #fce4ec;
+            color: #ad1457;
+        }
+
+        /* 时间显示样式 */
+        .timestamp {
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-weight: 600;
+            background: #f8f9fa;
+            padding: 2px 6px;
+            border-radius: 3px;
+            border: 1px solid #e9ecef;
+        }
+
+        .start-time {
+            color: #0366d6;
+            background: #f1f8ff;
+            border-color: #c8e1ff;
+        }
+
+        .end-time {
+            color: #28a745;
+            background: #f0fff4;
+            border-color: #c3e6cb;
+        }
+
+        .error-time {
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 11px;
+            color: #6c757d;
+            background: #f8f9fa;
+            padding: 2px 4px;
+            border-radius: 2px;
+        }
+
+        .table-container {
+            overflow-x: auto;
+            margin-top: 20px;
+        }
+
+        .content-modal {
+            display: none;
+            position: fixed;
+            z-index: 1001;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+        }
+
+        .content-modal-content {
+            background-color: white;
+            margin: 2% auto;
+            padding: 20px;
+            border-radius: 10px;
+            width: 90%;
+            max-width: 1000px;
+            max-height: 90%;
+            overflow-y: auto;
+        }
+
+        .content-modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #dee2e6;
+        }
+
+        .full-content {
+            background: #f4f4f4;
+            padding: 15px;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            word-break: break-word;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 12px;
+            line-height: 1.6;
+            max-height: 70vh;
+            overflow-y: auto;
+        }
+
+        .full-content-container {
+            max-height: 70vh;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>HAR文件分析工具</h1>
+            <p>专业的HTTP请求分析与故障排查工具</p>
+        </div>
+
+        <div id="uploadSection">
+            <div class="upload-area" id="uploadArea">
+                <div class="upload-icon">📁</div>
+                <div class="upload-text">拖拽HAR文件到此处或点击选择文件</div>
+                <div class="upload-hint">支持.har格式文件，最大100MB</div>
+                <input type="file" id="fileInput" accept=".har" />
+                <button class="btn" id="selectBtn">选择文件</button>
+            </div>
+        </div>
+
+        <div class="results" id="resultsSection">
+            <div class="summary-cards" id="summaryCards"></div>
+
+            <div class="tabs">
+                <div class="tab-buttons">
+                    <button class="tab-btn active" data-tab="requests">请求详情</button>
+                    <button class="tab-btn" data-tab="errors">错误分析</button>
+                    <button class="tab-btn" data-tab="performance">性能分析</button>
+                    <button class="tab-btn" data-tab="domains">域名统计</button>
+                    <button class="tab-btn" data-tab="filetypes">文件类型</button>
+                    <button class="tab-btn" data-tab="timeline">时间轴</button>
+                </div>
+
+                <div class="tab-content">
+                    <div class="tab-panel active" id="tab-requests">
+                        <!-- 排序控制区域 -->
+                        <div style="background: #f8f9fa; padding: 15px; margin-bottom: 20px; border-radius: 8px; border: 1px solid #e9ecef;">
+                            <div style="display: flex; align-items: center; gap: 20px; flex-wrap: wrap;">
+                                <h4 style="margin: 0; color: #495057;">请求列表</h4>
+                                <div style="display: flex; align-items: center; gap: 10px;">
+                                    <label style="font-weight: 600; color: #6c757d;">排序方式：</label>
+                                    <select id="sortSelect" style="padding: 8px 12px; border: 1px solid #ced4da; border-radius: 4px; background: white;">
+                                        <option value="default">默认顺序（请求序号）</option>
+                                        <option value="time-asc">按时间排序（早→晚）</option>
+                                        <option value="time-desc">按时间排序（晚→早）</option>
+                                        <option value="status-asc">按状态码排序（小→大）</option>
+                                        <option value="duration-desc">按耗时排序（慢→快）</option>
+                                    </select>
+                                </div>
+                                <div style="color: #6c757d; font-size: 14px;">
+                                    总计：<strong id="requestCount">0</strong> 个请求
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="table-container">
+                            <table class="requests-table" id="requestsTable">
+                                <thead>
+                                    <tr>
+                                        <th>#</th>
+                                        <th>开始时间</th>
+                                        <th>方法</th>
+                                        <th>状态</th>
+                                        <th>URL</th>
+                                        <th>域名</th>
+                                        <th>IP地址</th>
+                                        <th>大小</th>
+                                        <th>耗时</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+=======
+                    </div>
+
+                    <div class="tab-panel" id="tab-errors">
+                        <div id="errorsContent"></div>
+                    </div>
+
+                    <div class="tab-panel" id="tab-performance">
+                        <div id="performanceContent"></div>
+                    </div>
+
+                    <div class="tab-panel" id="tab-domains">
+                        <div id="domainsContent"></div>
+                    </div>
+
+                    <div class="tab-panel" id="tab-filetypes">
+                        <div id="filetypesContent"></div>
+                    </div>
+
+                    <div class="tab-panel" id="tab-timeline">
+                        <div id="timelineContent"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 重置按钮 -->
+    <button id="resetBtn" class="reset-button">分析新文件</button>
+
+    <!-- 加载遮罩层 -->
+    <div id="loadingOverlay" class="loading-overlay">
+        <div class="loading-content">
+            <div class="spinner"></div>
+            <div style="margin-top: 20px;">正在分析HAR文件...</div>
+            <div style="margin-top: 10px; font-size: 14px; color: #666;">
+                文件较大时可能需要较长时间，请耐心等待
+            </div>
+        </div>
+    </div>
+
+    <!-- 请求详情模态框 -->
+    <div id="requestModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>请求详情</h2>
+                <span class="close">&times;</span>
+            </div>
+            <div id="requestDetailsContent"></div>
+        </div>
+    </div>
+
+    <!-- 完整内容模态框 -->
+    <div id="contentModal" class="content-modal">
+        <div class="content-modal-content">
+            <div class="content-modal-header">
+                <h2 id="contentModalTitle">完整内容</h2>
+                <span class="close" onclick="closeContentModal()">&times;</span>
+            </div>
+            <div id="contentModalBody"></div>
+        </div>
+    </div>
+
+    <script>
+        let analysisData = null;
+
+        // DOM元素
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const selectBtn = document.getElementById('selectBtn');
+        const uploadSection = document.getElementById('uploadSection');
+        const resultsSection = document.getElementById('resultsSection');
+        const modal = document.getElementById('requestModal');
+        const closeModal = document.querySelector('.close');
+        const resetBtn = document.getElementById('resetBtn');
+
+        // 初始化
+        init();
+
+        function init() {
+            setupEventListeners();
+        }
+
+        function setupEventListeners() {
+            selectBtn.addEventListener('click', () => fileInput.click());
+            fileInput.addEventListener('change', handleFileSelect);
+            setupDragAndDrop();
+            setupTabs();
+            closeModal.addEventListener('click', closeRequestModal);
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) closeRequestModal();
+            });
+            resetBtn.addEventListener('click', resetAnalysis);
+        }
+
+        function setupDragAndDrop() {
+            uploadArea.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                uploadArea.classList.add('dragover');
+            });
+
+            uploadArea.addEventListener('dragleave', () => {
+                uploadArea.classList.remove('dragover');
+            });
+
+            uploadArea.addEventListener('drop', (e) => {
+                e.preventDefault();
+                uploadArea.classList.remove('dragover');
+                const files = e.dataTransfer.files;
+                if (files.length > 0) {
+                    handleFile(files[0]);
+                }
+            });
+
+            uploadArea.addEventListener('click', () => fileInput.click());
+        }
+
+        function setupTabs() {
+            const tabBtns = document.querySelectorAll('.tab-btn');
+            const tabPanels = document.querySelectorAll('.tab-panel');
+
+            tabBtns.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const tabId = btn.getAttribute('data-tab');
+                    tabBtns.forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    tabPanels.forEach(panel => panel.classList.remove('active'));
+                    document.getElementById(`tab-${tabId}`).classList.add('active');
+                });
+            });
+        }
+
+        function handleFileSelect(e) {
+            const file = e.target.files[0];
+            if (file) {
+                handleFile(file);
+            }
+        }
+
+        function handleFile(file) {
+            if (!file.name.toLowerCase().endsWith('.har')) {
+                showError('请选择.har格式的文件');
+                return;
+            }
+
+            if (file.size > 100 * 1024 * 1024) {
+                showError('文件大小不能超过100MB');
+                return;
+            }
+
+            uploadFile(file);
+        }
+
+        async function uploadFile(file) {
+            showLoading();
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 120000);
+
+                const response = await fetch('/api/analyze-har', {
+                    method: 'POST',
+                    body: formData,
+                    signal: controller.signal
+                });
+
+                clearTimeout(timeoutId);
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`分析失败 (${response.status}): ${errorText}`);
+                }
+
+                const result = await response.json();
+
+                if (result.success) {
+                    analysisData = result.data;
+                    showResults();
+                } else {
+                    throw new Error(result.message || '分析失败');
+                }
+
+            } catch (error) {
+                console.error('Error:', error);
+                hideLoading();
+
+                if (error.name === 'AbortError') {
+                    showError('分析超时，请检查文件大小是否过大或网络连接是否正常');
+                } else {
+                    showError('分析失败: ' + error.message);
+                }
+            }
+        }
+
+        function showLoading() {
+            const overlay = document.getElementById('loadingOverlay');
+            overlay.style.display = 'flex';
+        }
+
+        function hideLoading() {
+            const overlay = document.getElementById('loadingOverlay');
+            overlay.style.display = 'none';
+        }
+
+        function showError(message) {
+            hideLoading();
+
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'alert alert-danger';
+            errorDiv.innerHTML = `
+                <strong>错误:</strong> ${message}
+                <button class="btn" onclick="this.parentElement.remove()" style="float: right; margin-top: -5px; padding: 5px 10px;">关闭</button>
+            `;
+
+            const container = document.querySelector('.container');
+            container.insertBefore(errorDiv, container.firstChild);
+
+            setTimeout(() => {
+                if (errorDiv.parentNode) {
+                    errorDiv.parentNode.removeChild(errorDiv);
+                }
+            }, 5000);
+        }
+
+        function resetAnalysis() {
+            document.querySelectorAll('.alert-danger').forEach(alert => {
+                if (alert.parentNode) {
+                    alert.parentNode.removeChild(alert);
+                }
+            });
+
+            analysisData = null;
+            fileInput.value = '';
+            uploadSection.style.display = 'block';
+            resultsSection.style.display = 'none';
+            resetBtn.style.display = 'none';
+        }
+
+        function showResults() {
+            hideLoading();
+            uploadSection.style.display = 'none';
+            resultsSection.style.display = 'block';
+            resetBtn.style.display = 'block';
+
+            renderSummary();
+            renderRequests();
+            renderErrors();
+            renderPerformance();
+            renderDomains();
+            renderFileTypes();
+            renderTimeline();
+        }
+
+        function renderSummary() {
+            const summary = analysisData.summary;
+            const summaryCards = document.getElementById('summaryCards');
+
+            summaryCards.innerHTML = `
+                <div class="summary-card">
+                    <h3>总请求数</h3>
+                    <div class="value">${summary.total_requests}</div>
+                </div>
+                <div class="summary-card success">
+                    <h3>成功请求</h3>
+                    <div class="value">${summary.successful_requests}</div>
+                </div>
+                <div class="summary-card error">
+                    <h3>失败请求</h3>
+                    <div class="value">${summary.failed_requests}</div>
+                </div>
+                <div class="summary-card">
+                    <h3>成功率</h3>
+                    <div class="value">${summary.success_rate}</div>
+                </div>
+                <div class="summary-card">
+                    <h3>总传输大小</h3>
+                    <div class="value">${summary.total_size}</div>
+                </div>
+                <div class="summary-card">
+                    <h3>总耗时</h3>
+                    <div class="value">${summary.total_time}</div>
+                </div>
+            `;
+        }
+
+        function renderRequests(sortBy = 'default') {
+            let requests = [...analysisData.requests]; // 创建副本避免修改原数据
+
+            // 根据排序方式排序
+            switch(sortBy) {
+                case 'time-asc':
+                    requests.sort((a, b) => new Date(a.start_time) - new Date(b.start_time));
+                    break;
+                case 'time-desc':
+                    requests.sort((a, b) => new Date(b.start_time) - new Date(a.start_time));
+                    break;
+                case 'status-asc':
+                    requests.sort((a, b) => a.status_code - b.status_code);
+                    break;
+                case 'duration-desc':
+                    requests.sort((a, b) => {
+                        const aTime = parseFloat(a.total_time.replace(/[ms]/g, ''));
+                        const bTime = parseFloat(b.total_time.replace(/[ms]/g, ''));
+                        return bTime - aTime;
+                    });
+                    break;
+                default:
+                    // 保持原始顺序（按index排序）
+                    requests.sort((a, b) => a.index - b.index);
+                    break;
+            }
+
+            const tbody = document.querySelector('#requestsTable tbody');
+            tbody.innerHTML = requests.map(req => `
+                <tr class="${req.is_error ? 'error-row' : ''}">
+                    <td>${req.index}</td>
+                    <td><span class="timestamp start-time" style="font-size: 11px; padding: 3px 6px;">${formatTimeWithMs(req.start_time)}</span></td>
+                    <td><span class="method-badge method-${req.method.toLowerCase()}">${req.method}</span></td>
+                    <td><span class="status-badge ${getStatusClass(req.status_code)}">${req.status_code}</span></td>
+                    <td class="url-cell" title="${req.url}">${req.url}</td>
+                    <td>${req.domain}</td>
+                    <td>${req.server_ip}</td>
+                    <td>${req.content_size}</td>
+                    <td>${req.total_time}</td>
+                    <td><button class="btn" onclick="showRequestDetails(${req.index - 1})" style="padding: 6px 12px; font-size: 12px;">详情</button></td>
+                </tr>
+            `).join('');
+
+            // 设置排序选择器的事件监听
+            const sortSelect = document.getElementById('sortSelect');
+            if (sortSelect && !sortSelect.hasAttribute('data-initialized')) {
+                sortSelect.addEventListener('change', (e) => {
+                    renderRequests(e.target.value);
+                });
+                sortSelect.setAttribute('data-initialized', 'true');
+            }
+
+            // 更新请求数量显示
+            const requestCount = document.getElementById('requestCount');
+            if (requestCount) {
+                requestCount.textContent = requests.length;
+            }
+        }
+
+        function renderErrors() {
+            const errors = analysisData.errors;
+            const content = document.getElementById('errorsContent');
+
+            if (errors.total_errors === 0) {
+                content.innerHTML = '<div class="alert alert-success">恭喜！没有发现错误请求</div>';
+                return;
+            }
+
+            let html = `
+                <div class="alert alert-danger">
+                    发现 ${errors.total_errors} 个错误请求 (错误率: ${errors.error_rate})
+                </div>
+            `;
+
+            // 添加状态码说明
+            html += `
+                <div class="alert" style="background: #e8f4f8; color: #0c5460; border: 1px solid #bee5eb; margin-bottom: 20px;">
+                    <strong>重要提示:</strong> 请重点关注HTTP状态码进行问题判断。错误解决方案仅供参考，具体问题需要根据状态码和响应内容进行分析。
+                </div>
+            `;
+
+            // 添加整体错误汇总分析
+            html += renderErrorSummary(errors);
+
+            html += '<div class="error-overview">';
+            html += '<h3>按状态码分组的错误详情</h3>';
+
+            Object.entries(errors.error_breakdown).forEach(([status, requests]) => {
+                const groupId = status.replace(/\s+/g, '-');
+                const statusCode = status.split(' ')[0]; // 提取状态码数字
+                const statusDescription = getStatusCodeDescription(statusCode);
+
+                html += `
+                    <div class="error-group">
+                        <div class="error-group-header" onclick="toggleErrorGroup('${groupId}')">
+                            <h4>
+                                <div style="display: flex; align-items: center; gap: 15px;">
+                                    <span class="status-badge status-error" style="font-size: 16px; font-weight: bold; min-width: 80px;">${status}</span>
+                                    <span style="color: #2c3e50; font-weight: 500;">${statusDescription}</span>
+                                    <span class="error-count">${requests.length} 个请求</span>
+                                </div>
+                                <span class="toggle-icon" id="icon-${groupId}">▼</span>
+                            </h4>
+                        </div>
+                        <div class="error-group-content" id="content-${groupId}" style="display: none;">
+                            <div class="error-requests-list">
+                                ${requests.map((error, index) => `
+                                    <div class="error-request-item">
+                                        <div class="error-request-header" onclick="toggleErrorDetail('${groupId}-${index}')">
+                                            <div class="error-request-info">
+                                                <span class="method-badge method-${error.method.toLowerCase()}">${error.method}</span>
+                                                <span class="status-badge status-error" style="margin-right: 10px; font-weight: bold;">${error.status_code}</span>
+                                                <span class="error-domain">${error.domain}</span>
+                                                <span class="error-ip">${error.server_ip}</span>
+                                                <span class="error-time">${formatTimeWithMs(error.time)}</span>
+                                            </div>
+                                            <span class="detail-toggle" id="toggle-${groupId}-${index}">详情 ▼</span>
+                                        </div>
+                                        <div class="error-request-detail" id="detail-${groupId}-${index}" style="display: none;">
+                                            ${renderErrorDetail(error)}
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            html += '</div>';
+            content.innerHTML = html;
+        }
+
+        function renderErrorSummary(errors) {
+            // 汇总所有错误的信息
+            let allDomains = new Set();
+            let allIPs = new Set();
+            let statusCodes = new Set();
+            let commonCauses = new Set();
+
+            // 遍历所有错误请求，收集信息
+            Object.entries(errors.error_breakdown).forEach(([status, requests]) => {
+                const statusCode = status.split(' ')[0];
+                statusCodes.add(statusCode);
+
+                requests.forEach(error => {
+                    if (error.domain) allDomains.add(error.domain);
+                    if (error.server_ip) allIPs.add(error.server_ip);
+
+                    if (error.error_analysis) {
+                        if (error.error_analysis.possible_causes) {
+                            error.error_analysis.possible_causes.forEach(cause => commonCauses.add(cause));
+                        }
+                    }
+                });
+            });
+
+            let html = '<div class="error-summary-card">';
+            html += '<h3>错误汇总分析</h3>';
+            html += '<div class="alert" style="background: #fff3cd; border: 1px solid #ffeaa7; padding: 10px; border-radius: 4px; margin-bottom: 15px;">';
+            html += '<strong>注意：</strong> 以下解决方案仅供参考，具体问题需要根据HTTP状态码和响应内容进行分析判断。';
+            html += '</div>';
+
+            // 状态码统计
+            html += '<div class="summary-section">';
+            html += '<h4>状态码分布</h4>';
+            html += '<div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 15px;">';
+            Array.from(statusCodes).forEach(code => {
+                const count = Object.keys(errors.error_breakdown).filter(status => status.startsWith(code)).length;
+                const description = getStatusCodeDescription(code);
+                html += `<div style="background: #f8d7da; color: #721c24; padding: 8px 12px; border-radius: 6px; border: 1px solid #f5c6cb;">
+                    <strong>${code}</strong> - ${description}
+                </div>`;
+            });
+            html += '</div>';
+            html += '</div>';
+
+            // 错误描述
+            html += '<div class="summary-section">';
+            html += '<h4>错误描述</h4>';
+            html += `<p>检测到 <strong>${errors.total_errors}</strong> 个错误请求，涉及 <strong>${allDomains.size}</strong> 个域名和 <strong>${allIPs.size}</strong> 个IP地址。请重点关注状态码进行问题分析。</p>`;
+            html += '</div>';
+
+            // 推荐解决方案
+            html += '<div class="summary-section">';
+            html += '<h4>通用解决建议（仅供参考）</h4>';
+            html += '<ul class="summary-solutions">';
+            html += '<li>优先查看具体的HTTP状态码和响应内容</li>';
+            html += '<li>根据状态码类型进行针对性分析（4xx客户端错误，5xx服务器错误等）</li>';
+            html += '<li>检查网络连接和DNS解析是否正常</li>';
+
+            if (allIPs.size > 0 && allIPs.size <= 10) {
+                const ipList = Array.from(allIPs).join('、');
+                html += `<li>考虑将相关IP地址加入白名单：<code>${ipList}</code></li>`;
+            }
+
+            if (allDomains.size > 0 && allDomains.size <= 10) {
+                const domainList = Array.from(allDomains).join('、');
+                html += `<li>考虑将相关域名加入白名单：<code>${domainList}</code></li>`;
+            }
+
+            html += '<li>检查代理设置和防火墙配置</li>';
+            html += '<li>联系技术人员进行详细分析</li>';
+            html += '</ul>';
+            html += '</div>';
+
+            html += '</div>';
+            return html;
+        }
+
+        function renderErrorDetail(error) {
+            const analysis = error.error_analysis;
+            return `
+                <div class="error-detail-content">
+                    <div style="background: #f8d7da; border: 1px solid #f5c6cb; border-radius: 6px; padding: 15px; margin-bottom: 20px;">
+                        <h4 style="color: #721c24; margin-bottom: 15px;">关键信息（重点关注）</h4>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+                            <div>
+                                <strong>HTTP状态码:</strong>
+                                <span class="status-badge status-error" style="margin-left: 10px; font-size: 14px;">${error.status_code}</span>
+                            </div>
+                            <div><strong>状态说明:</strong> ${getStatusCodeDescription(error.status_code)}</div>
+                            <div><strong>请求方法:</strong> <span class="method-badge method-${error.method.toLowerCase()}">${error.method}</span></div>
+                            <div><strong>服务器IP:</strong> <code>${error.server_ip}</code></div>
+                        </div>
+                    </div>
+
+                    <div class="error-url">
+                        <strong>完整URL:</strong> ${error.url}
+                    </div>
+
+                    <div class="error-description">
+                        <h4>错误描述</h4>
+                        <p>${analysis.description}</p>
+                    </div>
+
+                    ${error.response_content && error.response_content.preview ? `
+                        <div class="response-preview">
+                            <h4>响应内容（重要诊断信息）</h4>
+                            <div class="response-info">
+                                <span>类型: ${error.response_content.mime_type}</span>
+                                <span>大小: ${error.response_content.size} bytes</span>
+                            </div>
+                            ${highlightContent(error.response_content.preview, error.response_content.mime_type)}
+                        </div>
+                    ` : ''}
+
+                    <div class="alert" style="background: #fff3cd; border: 1px solid #ffeaa7; padding: 12px; border-radius: 4px; margin: 20px 0;">
+                        <strong>诊断建议:</strong> 请优先根据上述状态码和响应内容进行问题判断，以下解决方案仅供参考。
+                    </div>
+
+                    <div class="error-causes">
+                        <h4>可能原因（参考）</h4>
+                        <ul>
+                            ${analysis.possible_causes.map(cause => `<li>${cause}</li>`).join('')}
+                        </ul>
+                    </div>
+
+                    <div class="error-solutions">
+                        <h4>建议解决方案（仅供参考）</h4>
+                        <ul class="solutions-list">
+                            ${analysis.solutions.map(solution => `<li>${solution}</li>`).join('')}
+                        </ul>
+                    </div>
+
+                    ${analysis.whitelist_info ? `
+                        <div class="whitelist-info">
+                            <h4>网络白名单配置建议</h4>
+                            <div class="whitelist-config">
+                                <div class="config-item">
+                                    <strong>域名:</strong> <code>${analysis.whitelist_info.domain}</code>
+                                </div>
+                                <div class="config-item">
+                                    <strong>IP地址:</strong> <code>${analysis.whitelist_info.ip}</code>
+                                </div>
+                                <div class="config-suggestions">
+                                    <strong>建议配置:</strong>
+                                    <ul>
+                                        ${analysis.whitelist_info.whitelist_suggestions.map(suggestion => `<li><code>${suggestion}</code></li>`).join('')}
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+        }
+
+        function toggleErrorGroup(groupId) {
+            const content = document.getElementById(`content-${groupId}`);
+            const icon = document.getElementById(`icon-${groupId}`);
+
+            if (content.style.display === 'none') {
+                content.style.display = 'block';
+                icon.textContent = '▲';
+            } else {
+                content.style.display = 'none';
+                icon.textContent = '▼';
+            }
+        }
+
+        function toggleErrorDetail(detailId) {
+            const detail = document.getElementById(`detail-${detailId}`);
+            const toggle = document.getElementById(`toggle-${detailId}`);
+
+            if (detail.style.display === 'none') {
+                detail.style.display = 'block';
+                toggle.textContent = '收起 ▲';
+            } else {
+                detail.style.display = 'none';
+                toggle.textContent = '详情 ▼';
+            }
+        }
+
+        function renderPerformance() {
+            const perf = analysisData.performance;
+            const content = document.getElementById('performanceContent');
+
+            content.innerHTML = `
+                <div class="summary-cards">
+                    <div class="summary-card">
+                        <h3>平均响应时间</h3>
+                        <div class="value">${perf.avg_response_time}</div>
+                    </div>
+                    <div class="summary-card">
+                        <h3>最短响应时间</h3>
+                        <div class="value">${perf.min_response_time}</div>
+                    </div>
+                    <div class="summary-card">
+                        <h3>最长响应时间</h3>
+                        <div class="value">${perf.max_response_time}</div>
+                    </div>
+                    <div class="summary-card">
+                        <h3>总传输大小</h3>
+                        <div class="value">${perf.total_transfer_size}</div>
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-top: 30px;">
+                    <div>
+                        <h3>最慢的5个请求</h3>
+                        <div class="table-container">
+                            <table class="requests-table">
+                                <thead>
+                                    <tr>
+                                        <th>URL</th>
+                                        <th>方法</th>
+                                        <th>耗时</th>
+                                        <th>状态</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${perf.slowest_requests.map(req => `
+                                        <tr>
+                                            <td class="url-cell" title="${req.url}">${req.url}</td>
+                                            <td><span class="method-badge method-${req.method.toLowerCase()}">${req.method}</span></td>
+                                            <td>${req.time}</td>
+                                            <td><span class="status-badge ${getStatusClass(req.status)}">${req.status}</span></td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div>
+                        <h3>最大的5个请求</h3>
+                        <div class="table-container">
+                            <table class="requests-table">
+                                <thead>
+                                    <tr>
+                                        <th>URL</th>
+                                        <th>方法</th>
+                                        <th>大小</th>
+                                        <th>状态</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${perf.largest_requests.map(req => `
+                                        <tr>
+                                            <td class="url-cell" title="${req.url}">${req.url}</td>
+                                            <td><span class="method-badge method-${req.method.toLowerCase()}">${req.method}</span></td>
+                                            <td>${req.size}</td>
+                                            <td><span class="status-badge ${getStatusClass(req.status)}">${req.status}</span></td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderDomains() {
+            const domains = analysisData.domains;
+            const content = document.getElementById('domainsContent');
+
+            content.innerHTML = `
+                <div class="alert" style="background: #e3f2fd; color: #1565c0; border: 1px solid #bbdefb;">
+                    共访问了 ${domains.total_domains} 个不同的域名
+                </div>
+
+                <div class="domain-stats">
+                    ${domains.domain_stats.map(domain => `
+                        <div class="domain-item">
+                            <div class="domain-name">${domain.domain}</div>
+                            <div class="domain-stats-grid">
+                                <div class="stat-item">
+                                    <div class="stat-label">请求数</div>
+                                    <div class="stat-value">${domain.request_count}</div>
+                                </div>
+                                <div class="stat-item">
+                                    <div class="stat-label">总大小</div>
+                                    <div class="stat-value">${domain.total_size}</div>
+                                </div>
+                                <div class="stat-item">
+                                    <div class="stat-label">平均耗时</div>
+                                    <div class="stat-value">${domain.avg_time}</div>
+                                </div>
+                                <div class="stat-item">
+                                    <div class="stat-label">错误数</div>
+                                    <div class="stat-value">${domain.error_count}</div>
+                                </div>
+                                <div class="stat-item">
+                                    <div class="stat-label">错误率</div>
+                                    <div class="stat-value">${domain.error_rate}</div>
+                                </div>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        function renderFileTypes() {
+            const fileTypes = analysisData.file_types;
+            const content = document.getElementById('filetypesContent');
+
+            content.innerHTML = `
+                <div class="table-container">
+                    <table class="requests-table">
+                        <thead>
+                            <tr>
+                                <th>文件类型</th>
+                                <th>请求数量</th>
+                                <th>总大小</th>
+                                <th>平均大小</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${fileTypes.map(type => `
+                                <tr>
+                                    <td>${type.type}</td>
+                                    <td>${type.count}</td>
+                                    <td>${type.total_size}</td>
+                                    <td>${type.avg_size}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+        }
+
+        function renderTimeline() {
+            const timeline = analysisData.timeline;
+            const content = document.getElementById('timelineContent');
+
+            if (timeline.length === 0) {
+                content.innerHTML = '<div class="alert">没有时间线数据</div>';
+                return;
+            }
+
+            content.innerHTML = `
+                <div class="timeline">
+                    ${timeline.map(item => {
+                        const time = formatTimeWithMs(item.time);
+                        return `
+                            <div class="timeline-item">
+                                <div class="timeline-time">${time}</div>
+                                <div class="timeline-method">
+                                    <span class="method-badge method-${item.method.toLowerCase()}">${item.method}</span>
+                                </div>
+                                <div class="timeline-url" title="${item.url}">${item.url}</div>
+                                <div class="timeline-duration">${item.duration.toFixed(2)}ms</div>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            `;
+        }
+
+        function showRequestDetails(index) {
+            const request = analysisData.requests[index];
+            const content = document.getElementById('requestDetailsContent');
+
+            content.innerHTML = `
+                <div class="request-details">
+                    <!-- 时间信息突出显示 -->
+                    <div class="detail-section" style="background: #f8f9fa; border: 2px solid #e9ecef; margin-bottom: 20px;">
+                        <h4>时间轴信息</h4>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px; align-items: center;">
+                            <div>
+                                <div class="detail-label">开始时间:</div>
+                                <div><span class="timestamp start-time">${formatTimeWithMs(request.start_time)}</span></div>
+                            </div>
+                            <div>
+                                <div class="detail-label">总耗时:</div>
+                                <div style="font-weight: 700; color: #6f42c1; font-size: 16px;">${request.total_time}</div>
+                            </div>
+                            <div>
+                                <div class="detail-label">结束时间:</div>
+                                <div><span class="timestamp end-time">${getEndTime(request.start_time, request.total_time)}</span></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="detail-section">
+                        <h4>基本信息</h4>
+                        <div class="detail-grid">
+                            <div class="detail-label">请求方法:</div>
+                            <div><span class="method-badge method-${request.method.toLowerCase()}">${request.method}</span></div>
+
+                            <div class="detail-label">状态码:</div>
+                            <div><span class="status-badge ${getStatusClass(request.status_code)}">${request.status_code} ${request.status_text}</span></div>
+
+                            <div class="detail-label">URL:</div>
+                            <div style="word-break: break-all;">${request.url}</div>
+
+                            <div class="detail-label">域名:</div>
+                            <div>${request.domain}</div>
+
+                            <div class="detail-label">服务器IP:</div>
+                            <div>${request.server_ip}</div>
+
+                            <div class="detail-label">内容类型:</div>
+                            <div>${request.content_type}</div>
+
+                            <div class="detail-label">响应大小:</div>
+                            <div>${request.content_size}</div>
+                        </div>
+                    </div>
+
+                    <div class="detail-section">
+                        <h4>时间分析</h4>
+                        <div class="detail-grid">
+                            <div class="detail-label">DNS解析:</div>
+                            <div>${request.timings.dns >= 0 ? request.timings.dns + 'ms' : '不适用'}</div>
+
+                            <div class="detail-label">建立连接:</div>
+                            <div>${request.timings.connect >= 0 ? request.timings.connect + 'ms' : '不适用'}</div>
+
+                            <div class="detail-label">SSL握手:</div>
+                            <div>${request.timings.ssl >= 0 ? request.timings.ssl + 'ms' : '不适用'}</div>
+
+                            <div class="detail-label">发送请求:</div>
+                            <div>${request.timings.send >= 0 ? request.timings.send + 'ms' : '不适用'}</div>
+
+                            <div class="detail-label">等待响应:</div>
+                            <div>${request.timings.wait >= 0 ? request.timings.wait + 'ms' : '不适用'}</div>
+
+                            <div class="detail-label">接收数据:</div>
+                            <div>${request.timings.receive >= 0 ? request.timings.receive + 'ms' : '不适用'}</div>
+                        </div>
+                    </div>
+
+                    ${Object.keys(request.query_params).length > 0 ? `
+                    <div class="detail-section">
+                        <h4>查询参数</h4>
+                        <div class="json-highlight">${highlightJson(request.query_params)}</div>
+                    </div>
+                    ` : ''}
+
+                    ${request.post_data && request.post_data.text ? `
+                    <div class="detail-section">
+                        <h4>POST数据</h4>
+                        <div class="detail-grid">
+                            <div class="detail-label">类型:</div>
+                            <div>${request.post_data.mime_type}</div>
+                        </div>
+                        ${highlightContent(request.post_data.text, request.post_data.mime_type)}
+                        ${request.post_data.full_content && request.post_data.full_content.length > request.post_data.text.length ? `
+                            <button class="btn btn-sm" onclick="showFullContent(${request.index - 1}, 'post')">查看完整内容</button>
+                        ` : ''}
+                    </div>
+                    ` : ''}
+
+                    <div class="detail-section">
+                        <h4>请求头</h4>
+                        <div class="http-headers">${highlightHeaders(request.request_headers)}</div>
+                    </div>
+
+                    <div class="detail-section">
+                        <h4>响应头</h4>
+                        <div class="http-headers">${highlightHeaders(request.response_headers)}</div>
+                    </div>
+
+                    ${request.response_content && request.response_content.preview ? `
+                    <div class="detail-section">
+                        <h4>响应内容</h4>
+                        <div class="detail-grid">
+                            <div class="detail-label">类型:</div>
+                            <div>${request.response_content.mime_type}</div>
+
+                            <div class="detail-label">大小:</div>
+                            <div>${request.response_content.size} bytes</div>
+
+                            <div class="detail-label">编码:</div>
+                            <div>${request.response_content.encoding || '无'}</div>
+                        </div>
+                        ${highlightContent(request.response_content.preview, request.response_content.mime_type)}
+                        ${request.response_content.full_content && request.response_content.full_content.length > request.response_content.preview.length ? `
+                            <button class="btn btn-sm" onclick="showFullContent(${request.index - 1}, 'response')">查看完整内容</button>
+                        ` : ''}
+                    </div>
+                    ` : ''}
+                </div>
+            `;
+
+            modal.style.display = 'block';
+        }
+
+        function showFullContent(index, type) {
+            const contentModal = document.getElementById('contentModal');
+            const contentModalTitle = document.getElementById('contentModalTitle');
+            const contentModalBody = document.getElementById('contentModalBody');
+
+            let content = '';
+            let title = '';
+            let mimeType = '';
+
+            if (type === 'response') {
+                const request = analysisData.requests[index];
+                content = request.response_content.full_content || request.response_content.preview;
+                title = `响应内容 - ${request.response_content.mime_type}`;
+                mimeType = request.response_content.mime_type;
+            } else if (type === 'post') {
+                const request = analysisData.requests[index];
+                content = request.post_data.full_content || request.post_data.text;
+                title = `POST数据 - ${request.post_data.mime_type}`;
+                mimeType = request.post_data.mime_type;
+            }
+
+            contentModalTitle.textContent = title;
+            // 使用带滚动容器的完整内容显示
+            contentModalBody.innerHTML = `<div class="full-content-container">${highlightContent(content, mimeType)}</div>`;
+            contentModal.style.display = 'block';
+        }
+
+        function closeRequestModal() {
+            modal.style.display = 'none';
+        }
+
+        function closeContentModal() {
+            document.getElementById('contentModal').style.display = 'none';
+        }
+
+        function getStatusClass(status) {
+            if (status >= 200 && status < 300) return 'status-success';
+            if (status >= 300 && status < 400) return 'status-redirect';
+            if (status >= 400) return 'status-error';
+            return 'status-error';
+        }
+
+        function getStatusCodeDescription(code) {
+            const statusDescriptions = {
+                '400': '请求语法错误',
+                '401': '未授权访问',
+                '403': '禁止访问',
+                '404': '资源未找到',
+                '405': '方法不允许',
+                '408': '请求超时',
+                '429': '请求过于频繁',
+                '500': '服务器内部错误',
+                '502': '网关错误',
+                '503': '服务不可用',
+                '504': '网关超时',
+                '0': '网络连接失败',
+                '-1': '请求被阻止'
+            };
+            return statusDescriptions[code] || `HTTP ${code} 错误`;
+        }
+
+        function escapeHtml(text) {
+            const map = {
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#039;'
+            };
+            return text.replace(/[&<>"']/g, function(m) { return map[m]; });
+        }
+
+        // JSON语法高亮函数
+        function highlightJson(jsonString) {
+            try {
+                let parsed;
+                let formatted;
+
+                // 如果输入已经是对象，直接序列化
+                if (typeof jsonString === 'object') {
+                    parsed = jsonString;
+                    formatted = JSON.stringify(parsed, null, 2);
+                } else {
+                    // 如果是字符串，先解析再格式化
+                    parsed = JSON.parse(jsonString);
+                    formatted = JSON.stringify(parsed, null, 2);
+                }
+
+                // 转义HTML字符
+                formatted = escapeHtml(formatted);
+
+                // 应用语法高亮
+                return formatted
+                    // 键名高亮 (引号内的内容后跟冒号)
+                    .replace(/(&quot;[^&]*?&quot;)\s*:/g, '<span class="json-key">$1</span><span class="json-punctuation">:</span>')
+                    // 字符串值高亮
+                    .replace(/:\s*(&quot;[^&]*?&quot;)/g, '<span class="json-punctuation">:</span> <span class="json-string">$1</span>')
+                    // 数字值高亮
+                    .replace(/:\s*(-?\d+\.?\d*)/g, '<span class="json-punctuation">:</span> <span class="json-number">$1</span>')
+                    // 布尔值高亮
+                    .replace(/:\s*(true|false)/g, '<span class="json-punctuation">:</span> <span class="json-boolean">$1</span>')
+                    // null值高亮
+                    .replace(/:\s*(null)/g, '<span class="json-punctuation">:</span> <span class="json-null">$1</span>')
+                    // 括号高亮
+                    .replace(/([{}])/g, '<span class="json-bracket">$1</span>')
+                    .replace(/([[\\]])/g, '<span class="json-bracket">$1</span>')
+                    // 逗号高亮
+                    .replace(/([,])/g, '<span class="json-punctuation">$1</span>');
+            } catch (e) {
+                // 如果不是有效JSON，返回格式化的原始文本
+                return escapeHtml(String(jsonString));
+            }
+        }
+
+        // HTTP头部高亮函数
+        function highlightHeaders(headers) {
+            if (typeof headers === 'object' && headers !== null) {
+                let result = '';
+                for (const [name, value] of Object.entries(headers)) {
+                    // 对长值进行换行处理
+                    const wrappedValue = String(value).replace(/(.{80})/g, '$1\n    ');
+                    result += `<span class="header-name">${escapeHtml(name)}</span><span class="header-separator">: </span><span class="header-value">${escapeHtml(wrappedValue)}</span>\n`;
+                }
+                return result.trim();
+            }
+            return escapeHtml(String(headers));
+        }
+
+        // 智能内容高亮函数
+        function highlightContent(content, mimeType) {
+            if (!content) return '<div class="response-text">无内容</div>';
+
+            const type = mimeType ? mimeType.toLowerCase() : '';
+            const contentStr = String(content);
+
+            // JSON类型处理
+            if (type.includes('json') || type.includes('application/json')) {
+                return `<div class="data-type-tag json">JSON</div><div class="json-highlight">${highlightJson(contentStr)}</div>`;
+            }
+            // HTML类型处理
+            else if (type.includes('html') || type.includes('text/html')) {
+                return `<div class="data-type-tag html">HTML</div><div class="response-html">${escapeHtml(contentStr)}</div>`;
+            }
+            // 文本类型处理
+            else if (type.includes('text/')) {
+                return `<div class="data-type-tag text">TEXT</div><div class="response-text">${escapeHtml(contentStr)}</div>`;
+            }
+            // XML类型处理
+            else if (type.includes('xml')) {
+                return `<div class="data-type-tag html">XML</div><div class="response-html">${escapeHtml(contentStr)}</div>`;
+            }
+            // 其他类型 - 尝试解析为JSON
+            else {
+                try {
+                    JSON.parse(contentStr);
+                    return `<div class="data-type-tag json">JSON (Auto-detected)</div><div class="json-highlight">${highlightJson(contentStr)}</div>`;
+                } catch (e) {
+                    // 不是JSON，按文本处理
+                    return `<div class="data-type-tag">RAW</div><div class="response-text">${escapeHtml(contentStr)}</div>`;
+                }
+            }
+        }
+
+        // 格式化显示函数 - 处理各种数据类型
+        function formatForDisplay(data) {
+            if (data === null || data === undefined) {
+                return '无数据';
+            }
+
+            if (typeof data === 'object') {
+                try {
+                    return JSON.stringify(data, null, 2);
+                } catch (e) {
+                    return String(data);
+                }
+            }
+
+            return String(data);
+        }
+
+        // 计算请求结束时间（带毫秒）
+        function getEndTime(startTime, totalTimeStr) {
+            try {
+                const startDate = new Date(startTime);
+                // 从总耗时字符串中提取数字（如 "1.23s" 或 "123ms"）
+                const timeMatch = totalTimeStr.match(/([\d.]+)(ms|s)/);
+                if (timeMatch) {
+                    const timeValue = parseFloat(timeMatch[1]);
+                    const timeUnit = timeMatch[2];
+                    const durationMs = timeUnit === 's' ? timeValue * 1000 : timeValue;
+
+                    const endDate = new Date(startDate.getTime() + durationMs);
+                    return `${endDate.toLocaleString()}.${endDate.getMilliseconds().toString().padStart(3, '0')}`;
+                }
+                return '计算失败';
+            } catch (e) {
+                return '时间格式错误';
+            }
+        }
+
+        // 格式化时间戳为带毫秒的字符串
+        function formatTimeWithMs(timestamp) {
+            try {
+                const date = new Date(timestamp);
+                return `${date.toLocaleString()}.${date.getMilliseconds().toString().padStart(3, '0')}`;
+            } catch (e) {
+                return timestamp;
+            }
+        }
+
+        // 添加内容模态框的点击外部关闭功能
+        window.onclick = function(event) {
+            const contentModal = document.getElementById('contentModal');
+            if (event.target === contentModal) {
+                closeContentModal();
+            }
+        }
+    </script>
+</body>
+</html>
